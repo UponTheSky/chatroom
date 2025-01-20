@@ -5,14 +5,11 @@ namespace ChatRoom.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class ChatRoomController : ControllerBase
+public class ChatRoomController(
+    ILogger<ChatRoomController> logger
+) : ControllerBase
 {
-    private readonly ILogger<ChatRoomController> _logger;
-
-    public ChatRoomController(ILogger<ChatRoomController> logger)
-    {
-        _logger = logger;
-    }
+    private readonly ILogger<ChatRoomController> _logger = logger;
 
     [HttpGet("{id}")]
     public async Task<ActionResult<string>> GetChatRoom([FromRoute] long id)
@@ -22,7 +19,7 @@ public class ChatRoomController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<string>> GetChatRooms([FromQuery] long offset, [FromQuery] long limit)
+    public async Task<ActionResult<string>> ListChatRooms([FromQuery] long offset, [FromQuery] long limit)
     {
         _logger.LogInformation("Get ChatRooms with offset: {offset}, limit: {limit}", offset, limit);
 
