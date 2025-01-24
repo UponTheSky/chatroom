@@ -1,9 +1,7 @@
-using System.Net;
-using System.Resources;
+using System.Net.WebSockets;
+using System.Text;
 using ChatRoom.Models;
-using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace ChatRoom.Controllers;
@@ -81,28 +79,82 @@ public class ChatRoomController(
     {
         // TODO: add websocket
         // reference: https://learn.microsoft.com/en-us/aspnet/core/fundamentals/websockets?view=aspnetcore-9.0
-        var userIpAddress = GetUserIPAddress();
-
-        _logger.LogInformation("User {ip} joins ChatRoom {id}", userIpAddress, id);
-
-        if (!Guid.TryParse(id, out Guid idInUUID))
+        if (HttpContext.WebSockets.IsWebSocketRequest)
         {
-            return BadRequest("invalid ID format");
+            var userIpAddress = GetUserIPAddress();
+
+            _logger.LogInformation("User {ip} joins ChatRoom {id}", userIpAddress, id);
+
+            if (!Guid.TryParse(id, out Guid idInUUID))
+            {
+                HttpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+                return;
+            }
+
+            var chatRoom = await _context.ChatRoomItems.SingleAsync(item => item.Id == idInUUID);
+
+            if (chatRoom == null)
+            {
+                HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
+            await RunChatLoop(webSocket, chatRoom, userIpAddress ?? "noname");
         }
 
-        var chatRoom = await _context.ChatRoomItems.SingleAsync(item => item.Id == idInUUID);
-
-        if (chatRoom == null)
-        {
-            return NotFound();
-        }
-
-        // TODO: implement ws
-        return null!;
     }
 
     private string? GetUserIPAddress()
     {
         return HttpContext.Connection.RemoteIpAddress?.ToString();
+    }
+
+    private async Task RunChatLoop(WebSocket ws, ChatRoomItem chatRoom, string userIpAddress)
+    {
+        chatRoom.CurrentUsers.Add(userIpAddress);
+        await _context.SaveChangesAsync();
+
+        var buf = new byte[1024 * 4];
+        var receiveResult = await ws.ReceiveAsync(
+            new ArraySegment<byte>(buf),
+            CancellationToken.None
+        );
+
+        while (!receiveResult.CloseStatus.HasValue)
+        {
+            string? log = Encoding.UTF8.GetString(buf, 0, receiveResult.Count);
+            ChatLog chatLog = new()
+            {
+                ChatRoomItemId = chatRoom.Id,
+                ChatRoomItem = chatRoom,
+                Id = Guid.NewGuid(),
+                IpAddress = userIpAddress,
+                TimeStamp = DateTime.Now,
+                Text = log ?? "",
+            };
+            chatRoom.ChatLogs.Add(chatLog);
+            await _context.SaveChangesAsync();
+
+            await ws.SendAsync(
+                new ArraySegment<byte>(buf, 0, receiveResult.Count),
+                receiveResult.MessageType,
+                receiveResult.EndOfMessage,
+                CancellationToken.None
+            );
+
+            receiveResult = await ws.ReceiveAsync(
+                new ArraySegment<byte>(buf),
+                CancellationToken.None
+            );
+        }
+
+        await ws.CloseAsync(
+            receiveResult.CloseStatus.Value,
+            receiveResult.CloseStatusDescription,
+            CancellationToken.None
+        );
+
+        return;
     }
 }

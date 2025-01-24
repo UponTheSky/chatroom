@@ -28,4 +28,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// websockets
+app.UseWebSockets();
+
 app.Run();
