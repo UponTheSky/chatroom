@@ -14,4 +14,8 @@ You can check the docs in `/scalar/v1`.
 - This project uses Postgres as its DB. See:
     - https://learn.microsoft.com/en-us/ef/core/get-started/overview/first-app
     - https://www.npgsql.org/efcore
-    - Please host a postgres server using docker
+    - Please host a postgres server using docker(note that you should set the host as `localhost`, not the ip address of the docker container)
+
+- DB migrations is required before testing
+    - install the following package: `dotnet add package Microsoft.EntityFrameworkCore.Design`
+    - refer to: https://learn.microsoft.com/en-us/ef/core/managing-schemas/
