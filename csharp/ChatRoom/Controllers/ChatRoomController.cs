@@ -74,7 +74,7 @@ public class ChatRoomController(
         return CreatedAtAction(nameof(GetChatRoom), new { id = newChatRoom.Id }, newChatRoom);
     }
 
-    [Route("ws/[controller]/{id}/join")]
+    [HttpGet("ws/{id}/join")]
     public async Task JoinChatRoom([FromRoute] string id)
     {
         // TODO: add websocket
@@ -112,7 +112,12 @@ public class ChatRoomController(
 
     private async Task RunChatLoop(WebSocket ws, ChatRoomItem chatRoom, string userIpAddress)
     {
+
         chatRoom.CurrentUsers.Add(userIpAddress);
+
+        _context.ChangeTracker.DetectChanges();
+        Console.WriteLine(_context.ChangeTracker.DebugView.LongView);
+
         await _context.SaveChangesAsync();
 
         var buf = new byte[1024 * 4];
@@ -130,10 +135,13 @@ public class ChatRoomController(
                 ChatRoomItem = chatRoom,
                 Id = Guid.NewGuid(),
                 IpAddress = userIpAddress,
-                TimeStamp = DateTime.Now,
+                TimeStamp = DateTime.UtcNow,
                 Text = log ?? "",
             };
+
+            _context.ChatLogs.Add(chatLog);
             chatRoom.ChatLogs.Add(chatLog);
+
             await _context.SaveChangesAsync();
 
             await ws.SendAsync(
